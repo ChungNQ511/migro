@@ -2,6 +2,13 @@
 
 A powerful and user-friendly database migration tool built in Go, designed to simplify PostgreSQL database schema management with support for advanced features like automatic rollback handling, missing migration recovery, and comprehensive table operations.
 
+## 📖 Documentation
+
+- **[BUILD.md](BUILD.md)** - Complete build, release, and development guide
+- **[Installation](#-installation)** - Multiple installation methods
+- **[Quick Start](#-quick-start)** - Get started in minutes
+- **[Usage Examples](#-usage)** - Comprehensive command examples
+
 ## ✨ Features
 
 ### 🔧 Core Migration Features
@@ -418,6 +425,36 @@ QUERY_DIR: "./database/queries"
 ```
 
 ## 🤝 Contributing
+
+For detailed build and release instructions, see [BUILD.md](BUILD.md).
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/ChungNQ511/migro.git
+cd migro
+
+# Install dependencies
+make deps
+
+# Build and test locally
+make build
+make test
+
+# Run in development mode
+make dev
+```
+
+### Release Process
+
+See [BUILD.md](BUILD.md) for complete build and release documentation including:
+- Multi-platform builds
+- Release package creation
+- Version management
+- GitHub release process
+
+### Contributing Guidelines
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
