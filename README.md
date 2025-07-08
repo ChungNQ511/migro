@@ -28,7 +28,6 @@ A powerful and user-friendly database migration tool built in Go, designed to si
 ## 📦 Installation
 
 ### Prerequisites
-- Go 1.19+ 
 - PostgreSQL database
 - [Goose](https://github.com/pressly/goose) migration tool
 
@@ -37,11 +36,102 @@ A powerful and user-friendly database migration tool built in Go, designed to si
 go install github.com/pressly/goose/v3/cmd/goose@latest
 ```
 
-### Build Migro
+## 🚀 Installation Methods
+
+### Method 1: One-line Install (Recommended)
 ```bash
+# Install latest release automatically
+curl -sSL https://raw.githubusercontent.com/ChungNQ511/migro/main/install.sh | bash
+```
+
+### Method 2: Using Makefile (Development)
+```bash
+# Clone repository
 git clone https://github.com/ChungNQ511/migro.git
 cd migro
+
+# Show all available commands
+make help
+
+# Install to system PATH (requires sudo)
+make install
+
+# Install to user PATH (~/.local/bin) - no sudo required
+make install-user
+
+# Build only (binary in build/ directory)
+make build
+```
+
+### Method 3: Using Go Install
+```bash
+# Requires Go 1.19+
+go install github.com/ChungNQ511/migro@latest
+```
+
+### Method 4: Manual Download
+1. Go to [Releases](https://github.com/ChungNQ511/migro/releases)
+2. Download binary for your platform:
+   - `migro-linux-amd64` (Linux)
+   - `migro-darwin-amd64` (macOS Intel)
+   - `migro-darwin-arm64` (macOS Apple Silicon)
+   - `migro-windows-amd64.exe` (Windows)
+3. Rename to `migro` and make executable:
+   ```bash
+   chmod +x migro
+   sudo mv migro /usr/local/bin/
+   ```
+
+### Method 5: Docker
+```bash
+# Build Docker image
+docker build -t migro .
+
+# Run with Docker
+docker run --rm -v $(pwd):/workspace migro --help
+
+# Using docker-compose (includes PostgreSQL)
+docker-compose up -d postgres  # Start database
+docker-compose run migro --help # Run migro commands
+```
+
+### Method 6: Development Setup
+```bash
+# Clone and build from source
+git clone https://github.com/ChungNQ511/migro.git
+cd migro
+
+# Using Makefile
+make deps      # Download dependencies
+make build     # Build binary
+make run       # Build and run
+
+# Or using Go directly
 go build -o migro .
+./migro --help
+```
+
+## 🎯 Quick Start
+
+After installation, set up your first project:
+
+```bash
+# 1. Initialize config
+cp migro.example.yaml migro.yaml
+# or using Makefile
+make setup-example
+
+# 2. Edit migro.yaml with your database credentials
+vim migro.yaml
+
+# 3. Test connection
+migro status
+
+# 4. Create your first migration
+migro create-migration --name="init_database"
+
+# 5. Run migrations
+migro migrate
 ```
 
 ## ⚙️ Configuration

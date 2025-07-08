@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for development/testing
+  postgres:
+    image: postgres:15-alpine
+    container_name: migro-postgres
+    environment:
+      POSTGRES_DB: migro_dev
+      POSTGRES_USER: migro_user
+      POSTGRES_PASSWORD: migro_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migro_user -d migro_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Migro application
+  migro:
+    build: .
+    container_name: migro-app
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=migro_user
+      - DATABASE_PASSWORD=migro_password
+      - DATABASE_NAME=migro_dev
+    command: ["--help"]
+
+  # PgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: migro-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@migro.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  postgres_data: 
