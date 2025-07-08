@@ -250,6 +250,7 @@ func executeGoose(config *CONFIG, script MigrationScript) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, "goose",
 		"-dir", config.MIGRATION_DIR,
+		config.DATABASE_DRIVER,
 		config.DATABASE_CONNECTION_STRING,
 		string(script))
 
