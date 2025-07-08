@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -307,4 +308,24 @@ func parseVersionsFromStatus(output string) []int64 {
 	}
 
 	return versions
+}
+
+// Generate SQLC code from database
+// @param config *CONFIG
+// @return error
+func GenerateSQLC(config *CONFIG) error {
+
+	cmd := exec.Command("sqlc", "generate", "-f", "sqlc.yaml")
+	cmd.Dir = config.MIGRATION_DIR
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to generate SQLC code: %w", err)
+	}
+
+	fmt.Println("✅ SQLC code generated successfully!")
+
+	return nil
 }

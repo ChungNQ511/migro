@@ -231,6 +231,13 @@ func main() {
 					return migroCMD.ShowMigrationStatus(getGlobalConfig())
 				},
 			},
+			{
+				Name:  "sqlc",
+				Usage: "Generate SQLC code from database",
+				Action: func(c *cli.Context) error {
+					return migroCMD.GenerateSQLC(getGlobalConfig())
+				},
+			},
 		},
 	}
 
