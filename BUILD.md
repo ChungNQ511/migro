@@ -120,7 +120,7 @@ ls -la build/release/
 
 ```bash
 # Create version tag (semantic versioning)
-git tag -a v1.2.0 -m "v1.2.0: Your release description"
+git tag -a v1..0 -m "v1.2.0: Your release description"
 
 # Push tag
 git push origin v1.2.0

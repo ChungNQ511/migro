@@ -137,6 +137,83 @@ release: clean build-all ## Create release builds
 	
 	@echo "✅ Release packages created in $(BUILD_DIR)/release/"
 
+# Get current version from git tags
+CURRENT_VERSION := $(shell git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | sort -V | tail -1)
+CURRENT_VERSION := $(if $(CURRENT_VERSION),$(CURRENT_VERSION),v0.0.0)
+
+# Extract version components
+VERSION_PARTS := $(subst v,,$(CURRENT_VERSION))
+VERSION_PARTS := $(subst ., ,$(VERSION_PARTS))
+MAJOR := $(word 1,$(VERSION_PARTS))
+MINOR := $(word 2,$(VERSION_PARTS))
+PATCH := $(word 3,$(VERSION_PARTS))
+
+release-patch: ## Release new patch version (x.x.X)
+	$(eval NEW_VERSION := v$(MAJOR).$(MINOR).$(shell echo $$(($(PATCH) + 1))))
+	@echo "🏷️  Creating patch release: $(CURRENT_VERSION) → $(NEW_VERSION)"
+	@$(MAKE) _do_release VERSION=$(NEW_VERSION)
+
+release-minor: ## Release new minor version (x.X.0)
+	$(eval NEW_VERSION := v$(MAJOR).$(shell echo $$(($(MINOR) + 1))).0)
+	@echo "🏷️  Creating minor release: $(CURRENT_VERSION) → $(NEW_VERSION)"
+	@$(MAKE) _do_release VERSION=$(NEW_VERSION)
+
+release-major: ## Release new major version (X.0.0)
+	$(eval NEW_VERSION := v$(shell echo $$(($(MAJOR) + 1))).0.0)
+	@echo "🏷️  Creating major release: $(CURRENT_VERSION) → $(NEW_VERSION)"
+	@$(MAKE) _do_release VERSION=$(NEW_VERSION)
+
+release-auto: ## Automatic release (CRUD features = minor version)
+	$(eval NEW_VERSION := v1.2.0)
+	@echo "🚀 Creating automated release for CRUD features: $(NEW_VERSION)"
+	@$(MAKE) _do_release VERSION=$(NEW_VERSION) MESSAGE="✨ feat: Add comprehensive CRUD operations\n\n- Add insert, update, select-one, select-many, delete commands\n- Support automatic timestamps and soft delete\n- Add query preview and formatted table results\n- Include table validation from migration files\n- Update documentation with usage examples"
+
+_do_release: ## Internal: perform the actual release
+	@echo "🔄 Preparing release $(VERSION)..."
+	
+	# Check for uncommitted changes
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "📝 Committing changes..."; \
+		git add .; \
+		git commit -m "$${MESSAGE:-Release $(VERSION)}"; \
+	else \
+		echo "✅ Working directory is clean"; \
+	fi
+	
+	# Create and push tag
+	@echo "🏷️  Creating tag $(VERSION)..."
+	@git tag -a $(VERSION) -m "$(VERSION): $${MESSAGE:-Release $(VERSION)}"
+	@git push origin main
+	@git push origin $(VERSION)
+	
+	# Build release packages
+	@echo "📦 Building release packages..."
+	@$(MAKE) release
+	
+	@echo "✅ Release $(VERSION) completed!"
+	@echo ""
+	@echo "📋 Next steps:"
+	@echo "   1. Go to GitHub: https://github.com/ChungNQ511/migro/releases"
+	@echo "   2. Create a new release for tag $(VERSION)"
+	@echo "   3. Upload binaries from $(BUILD_DIR)/release/"
+	@echo "   4. Publish the release!"
+
+publish-github: ## Publish release to GitHub (requires gh CLI)
+	@echo "🚀 Publishing to GitHub..."
+	@if ! command -v gh &> /dev/null; then \
+		echo "❌ GitHub CLI (gh) not found. Install it first:"; \
+		echo "   brew install gh"; \
+		echo "   or visit: https://cli.github.com"; \
+		exit 1; \
+	fi
+	@echo "📤 Creating GitHub release..."
+	@gh release create $(VERSION) $(BUILD_DIR)/release/*.tar.gz $(BUILD_DIR)/release/*.zip \
+		--title "$(VERSION): CRUD Operations Support" \
+		--notes "🎉 **Major Feature Release**\n\n## New CRUD Operations\n- ✨ **insert**: Add records with auto timestamps\n- ✨ **update**: Modify records with auto updated_at\n- ✨ **select-one**: Query single records\n- ✨ **select-many**: Query multiple records with pagination\n- ✨ **delete**: Soft delete with deleted_at\n\n## Features\n- 📋 **Query Preview**: Shows SQL before execution\n- 🎨 **Formatted Results**: Beautiful table output\n- 🛡️ **Table Validation**: Checks against migration files\n- 🕒 **Auto Timestamps**: Handles created_at/updated_at\n\n## Installation\n\`\`\`bash\ncurl -sSL https://raw.githubusercontent.com/ChungNQ511/migro/main/install.sh | bash\n\`\`\`\n\nSee README.md for complete usage examples!"
+	@echo "✅ GitHub release published!"
+
+release-complete: release-auto publish-github ## Complete automated release with GitHub publishing
+
 ##@ Docker
 docker-build: ## Build Docker image
 	@echo "🐳 Building Docker image..."
