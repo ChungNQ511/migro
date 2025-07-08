@@ -607,13 +607,13 @@ func getColumnDefinition(db *pgxpool.Pool, tableName, columnName string) (string
 // @param table: string
 // @param columns: string
 func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string) error {
-	// check table exists
-	exists, err := checkTableExists(db, table)
+	// check table exists in migration files
+	exists, err := checkTableExistsInMigrations(config.MIGRATION_DIR, table)
 	if err != nil {
 		return fmt.Errorf("❌ error checking table exists: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("❌ table '%s' does not exist", table)
+		return fmt.Errorf("❌ table '%s' does not exist in migration files", table)
 	}
 
 	// get column names
@@ -622,13 +622,13 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 	var migrationFilename string
 	if len(columnNames) == 1 {
 		columnName := strings.TrimSpace(strings.Split(columnNames[0], ":")[0])
-		// check column exists
-		exists, err := checkColumnExists(db, table, columnName)
+		// check column exists in migration files
+		exists, err := checkColumnExistsInMigrations(config.MIGRATION_DIR, table, columnName)
 		if err != nil {
 			return fmt.Errorf("❌ error checking column exists: %w", err)
 		}
 		if !exists {
-			return fmt.Errorf("❌ column '%s' does not exist in table '%s'", columnName, table)
+			return fmt.Errorf("❌ column '%s' does not exist in table '%s' (checked from migration files)", columnName, table)
 		}
 		migrationFilename = fmt.Sprintf("delete_column_%s_from_%s", columnName, table)
 	} else {
@@ -638,13 +638,13 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 		for _, col := range columnNames {
 			colName := strings.TrimSpace(strings.Split(col, ":")[0])
 			if colName != "" {
-				// check column exists
-				exists, err := checkColumnExists(db, table, colName)
+				// check column exists in migration files
+				exists, err := checkColumnExistsInMigrations(config.MIGRATION_DIR, table, colName)
 				if err != nil {
 					return fmt.Errorf("❌ error checking column exists: %w", err)
 				}
 				if !exists {
-					return fmt.Errorf("❌ column '%s' does not exist in table '%s'", colName, table)
+					return fmt.Errorf("❌ column '%s' does not exist in table '%s' (checked from migration files)", colName, table)
 				}
 				columnNamesForFile = append(columnNamesForFile, colName)
 			}
@@ -725,7 +725,7 @@ func createMigrationDeleteColumnsFile(config *CONFIG, db *pgxpool.Pool, migratio
 	fileName := matches[0]
 
 	// Generate the SQL content
-	upSQL, downSQL, err := generateDeleteColumnsSQL(db, tableName, columns)
+	upSQL, downSQL, err := generateDeleteColumnsSQL(tableName, columns)
 	if err != nil {
 		return fmt.Errorf("error generating SQL: %w", err)
 	}
@@ -752,7 +752,7 @@ func createMigrationDeleteColumnsFile(config *CONFIG, db *pgxpool.Pool, migratio
 }
 
 // generateDeleteColumnsSQL generates ALTER TABLE DROP COLUMN and ADD COLUMN SQL statements
-func generateDeleteColumnsSQL(db *pgxpool.Pool, tableName, columns string) (string, string, error) {
+func generateDeleteColumnsSQL(tableName, columns string) (string, string, error) {
 	var upStatements []string
 	var downStatements []string
 
@@ -764,14 +764,12 @@ func generateDeleteColumnsSQL(db *pgxpool.Pool, tableName, columns string) (stri
 			continue
 		}
 
-		// Get the full column definition for rollback
-		columnDef, err := getColumnDefinition(db, tableName, columnName)
-		if err != nil {
-			return "", "", fmt.Errorf("error getting column definition for '%s': %w", columnName, err)
-		}
-
 		upStatements = append(upStatements, fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %s;", tableName, columnName))
-		downStatements = append(downStatements, fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s;", tableName, columnDef))
+
+		// For rollback, create a basic column definition
+		// Note: This creates a generic TEXT column for rollback
+		// Users should manually adjust the column type if needed after rollback
+		downStatements = append(downStatements, fmt.Sprintf("-- TODO: Adjust column type as needed\nALTER TABLE %s ADD COLUMN IF NOT EXISTS %s TEXT;", tableName, columnName))
 	}
 
 	return strings.Join(upStatements, "\n"), strings.Join(downStatements, "\n"), nil

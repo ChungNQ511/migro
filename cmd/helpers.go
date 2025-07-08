@@ -318,3 +318,220 @@ func getLocalMigrationVersions(migrationDir string) ([]int64, error) {
 
 	return versions, nil
 }
+
+// Parse migration files to extract table and column information
+// @param migrationDir string
+// @return map[string][]string, error (table -> columns)
+func parseMigrationFiles(migrationDir string) (map[string][]string, error) {
+	tableColumns := make(map[string][]string)
+
+	pattern := fmt.Sprintf("%s/[0-9]*.sql", migrationDir)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to glob migration files: %w", err)
+	}
+
+	for _, file := range matches {
+		err := parseMigrationFile(file, tableColumns)
+		if err != nil {
+			// Continue parsing other files even if one fails
+			fmt.Printf("⚠️  Warning: Failed to parse %s: %v\n", file, err)
+		}
+	}
+
+	return tableColumns, nil
+}
+
+// Parse a single migration file
+// @param filePath string
+// @param tableColumns map[string][]string
+// @return error
+func parseMigrationFile(filePath string, tableColumns map[string][]string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	fileContent := string(content)
+
+	// Extract only the -- +goose Up section
+	upContent := extractGooseUpContent(fileContent)
+
+	// Parse CREATE TABLE statements
+	parseCreateTableStatements(upContent, tableColumns)
+
+	// Parse ADD COLUMN statements
+	parseAddColumnStatements(upContent, tableColumns)
+
+	// Parse DROP COLUMN statements (remove columns)
+	parseDropColumnStatements(upContent, tableColumns)
+
+	return nil
+}
+
+// Extract content from -- +goose Up section
+// @param content string
+// @return string
+func extractGooseUpContent(content string) string {
+	// Find -- +goose Up section
+	upStart := strings.Index(content, "-- +goose Up")
+	if upStart == -1 {
+		return ""
+	}
+
+	// Find -- +goose Down section
+	downStart := strings.Index(content, "-- +goose Down")
+	if downStart == -1 {
+		return content[upStart:]
+	}
+
+	return content[upStart:downStart]
+}
+
+// Parse CREATE TABLE statements
+// @param content string
+// @param tableColumns map[string][]string
+func parseCreateTableStatements(content string, tableColumns map[string][]string) {
+	// Regex to match CREATE TABLE statements
+	re := regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]+)\)`)
+	matches := re.FindAllStringSubmatch(content, -1)
+
+	for _, match := range matches {
+		if len(match) >= 3 {
+			tableName := strings.TrimSpace(match[1])
+			columnsStr := match[2]
+
+			columns := parseColumnDefinitions(columnsStr)
+			if len(columns) > 0 {
+				tableColumns[tableName] = columns
+			}
+		}
+	}
+}
+
+// Parse ADD COLUMN statements
+// @param content string
+// @param tableColumns map[string][]string
+func parseAddColumnStatements(content string, tableColumns map[string][]string) {
+	// Regex to match ALTER TABLE ADD COLUMN statements
+	re := regexp.MustCompile(`(?i)ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)`)
+	matches := re.FindAllStringSubmatch(content, -1)
+
+	for _, match := range matches {
+		if len(match) >= 3 {
+			tableName := strings.TrimSpace(match[1])
+			columnName := strings.TrimSpace(match[2])
+
+			if _, exists := tableColumns[tableName]; !exists {
+				tableColumns[tableName] = []string{}
+			}
+
+			// Add column if not already exists
+			if !contains(tableColumns[tableName], columnName) {
+				tableColumns[tableName] = append(tableColumns[tableName], columnName)
+			}
+		}
+	}
+}
+
+// Parse DROP COLUMN statements
+// @param content string
+// @param tableColumns map[string][]string
+func parseDropColumnStatements(content string, tableColumns map[string][]string) {
+	// Regex to match ALTER TABLE DROP COLUMN statements
+	re := regexp.MustCompile(`(?i)ALTER\s+TABLE\s+(\w+)\s+DROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?(\w+)`)
+	matches := re.FindAllStringSubmatch(content, -1)
+
+	for _, match := range matches {
+		if len(match) >= 3 {
+			tableName := strings.TrimSpace(match[1])
+			columnName := strings.TrimSpace(match[2])
+
+			if columns, exists := tableColumns[tableName]; exists {
+				// Remove column from list
+				for i, col := range columns {
+					if col == columnName {
+						tableColumns[tableName] = append(columns[:i], columns[i+1:]...)
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+// Parse column definitions from CREATE TABLE
+// @param columnsStr string
+// @return []string
+func parseColumnDefinitions(columnsStr string) []string {
+	var columns []string
+
+	// Split by comma, but be careful with nested parentheses
+	lines := strings.Split(columnsStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "--") {
+			continue
+		}
+
+		// Remove trailing comma
+		line = strings.TrimSuffix(line, ",")
+
+		// Extract column name (first word)
+		parts := strings.Fields(line)
+		if len(parts) > 0 {
+			columnName := strings.TrimSpace(parts[0])
+			if columnName != "" && !strings.HasPrefix(columnName, "CONSTRAINT") && !strings.HasPrefix(columnName, "PRIMARY") && !strings.HasPrefix(columnName, "FOREIGN") {
+				columns = append(columns, columnName)
+			}
+		}
+	}
+
+	return columns
+}
+
+// Check if table exists in migration files
+// @param migrationDir string
+// @param tableName string
+// @return bool, error
+func checkTableExistsInMigrations(migrationDir, tableName string) (bool, error) {
+	tableColumns, err := parseMigrationFiles(migrationDir)
+	if err != nil {
+		return false, err
+	}
+
+	_, exists := tableColumns[tableName]
+	return exists, nil
+}
+
+// Check if column exists in migration files
+// @param migrationDir string
+// @param tableName string
+// @param columnName string
+// @return bool, error
+func checkColumnExistsInMigrations(migrationDir, tableName, columnName string) (bool, error) {
+	tableColumns, err := parseMigrationFiles(migrationDir)
+	if err != nil {
+		return false, err
+	}
+
+	columns, tableExists := tableColumns[tableName]
+	if !tableExists {
+		return false, nil
+	}
+
+	return contains(columns, columnName), nil
+}
+
+// Helper function to check if slice contains string
+// @param slice []string
+// @param item string
+// @return bool
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
