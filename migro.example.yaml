@@ -1,0 +1,33 @@
+# Migro Database Migration Tool Configuration
+# Copy this file to migro.yaml and update with your database credentials
+# The tool will automatically load migro.yaml from current directory
+
+# Environment (development, staging, production)
+ENV: "development"
+
+# Database Configuration
+DATABASE_DRIVER: "postgres"
+DATABASE_HOST: "localhost"
+DATABASE_PORT: "5432"
+DATABASE_USERNAME: "your_username"
+DATABASE_PASSWORD: "your_password"
+DATABASE_NAME: "your_database"
+
+# Connection Settings
+TIMEOUT_SECONDS: 30
+
+# Directory Paths (relative to project root)
+MIGRATION_DIR: "./db/migrations"
+QUERY_DIR: "./db/queries"
+
+# Example Production Configuration:
+# DATABASE_HOST: "prod-db.example.com"
+# DATABASE_PORT: "5432"
+# DATABASE_USERNAME: "app_user"
+# DATABASE_PASSWORD: "secure_production_password"
+# DATABASE_NAME: "production_db"
+
+# Example for different environments:
+# Development: Use local PostgreSQL
+# Staging: Use staging database server
+# Production: Use production database with SSL 
