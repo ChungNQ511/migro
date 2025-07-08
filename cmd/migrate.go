@@ -314,7 +314,31 @@ func parseVersionsFromStatus(output string) []int64 {
 // @param config *CONFIG
 // @return error
 func GenerateSQLC(config *CONFIG) error {
+	// Check if sqlc.yaml exists, create if not
+	sqlcConfigPath := filepath.Join(config.MIGRATION_DIR, "sqlc.yaml")
+	if _, err := os.Stat(sqlcConfigPath); os.IsNotExist(err) {
+		fmt.Println("📝 sqlc.yaml not found, creating default configuration...")
+		err := createDefaultSQLCConfig(config)
+		if err != nil {
+			return fmt.Errorf("failed to create sqlc.yaml: %w", err)
+		}
+		fmt.Printf("✅ Created %s\n", sqlcConfigPath)
+	}
 
+	// Check if sqlc command exists
+	if !commandExists("sqlc") {
+		return fmt.Errorf("❌ sqlc command not found. Install it first:\n" +
+			"   # Using Go:\n" +
+			"   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest\n" +
+			"   \n" +
+			"   # Using Homebrew (macOS):\n" +
+			"   brew install sqlc\n" +
+			"   \n" +
+			"   # Or download from: https://docs.sqlc.dev/en/latest/overview/install.html")
+	}
+
+	// Run sqlc generate
+	fmt.Println("🔄 Generating SQLC code...")
 	cmd := exec.Command("sqlc", "generate", "-f", "sqlc.yaml")
 	cmd.Dir = config.MIGRATION_DIR
 	cmd.Stdout = os.Stdout
@@ -322,10 +346,141 @@ func GenerateSQLC(config *CONFIG) error {
 
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to generate SQLC code: %w", err)
+		return fmt.Errorf("failed to generate SQLC code: %w\n"+
+			"💡 Make sure:\n"+
+			"   1. Your database is running and migrated\n"+
+			"   2. sqlc.yaml configuration is correct\n"+
+			"   3. Query directory exists with .sql files", err)
 	}
 
 	fmt.Println("✅ SQLC code generated successfully!")
+	return nil
+}
+
+// Initialize SQLC configuration
+// @param config *CONFIG
+// @return error
+func InitSQLC(config *CONFIG) error {
+	sqlcConfigPath := filepath.Join(config.MIGRATION_DIR, "sqlc.yaml")
+
+	// Check if sqlc.yaml already exists
+	if _, err := os.Stat(sqlcConfigPath); err == nil {
+		fmt.Printf("⚠️  sqlc.yaml already exists at: %s\n", sqlcConfigPath)
+		fmt.Print("Do you want to overwrite it? (y/N): ")
+
+		var response string
+		fmt.Scanln(&response)
+
+		if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
+			fmt.Println("❌ Cancelled. sqlc.yaml not modified.")
+			return nil
+		}
+	}
+
+	err := createDefaultSQLCConfig(config)
+	if err != nil {
+		return fmt.Errorf("failed to create sqlc.yaml: %w", err)
+	}
+
+	fmt.Printf("✅ Created sqlc.yaml at: %s\n", sqlcConfigPath)
+	fmt.Println("📝 Next steps:")
+	fmt.Println("   1. Create queries in your query directory")
+	fmt.Println("   2. Run: migro sqlc")
+	fmt.Println("   3. Check generated Go code")
 
 	return nil
+}
+
+// Create default SQLC configuration file
+// @param config *CONFIG
+// @return error
+func createDefaultSQLCConfig(config *CONFIG) error {
+	// Ensure migration directory exists
+	if err := os.MkdirAll(config.MIGRATION_DIR, 0755); err != nil {
+		return fmt.Errorf("failed to create migration directory: %w", err)
+	}
+
+	// Ensure query directory exists
+	queryDir := config.QUERY_DIR
+	if queryDir == "" {
+		queryDir = filepath.Join(config.MIGRATION_DIR, "queries")
+	}
+	if err := os.MkdirAll(queryDir, 0755); err != nil {
+		return fmt.Errorf("failed to create query directory: %w", err)
+	}
+
+	// Create relative paths
+	relativeQueryDir, err := filepath.Rel(config.MIGRATION_DIR, queryDir)
+	if err != nil {
+		relativeQueryDir = queryDir
+	}
+
+	// Default SQLC configuration
+	sqlcConfig := fmt.Sprintf(`version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "%s"
+    schema: "."
+    gen:
+      go:
+        package: "db"
+        out: "../internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        emit_all_enum_values: true
+        overrides:
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+`, relativeQueryDir)
+
+	// Write sqlc.yaml
+	sqlcConfigPath := filepath.Join(config.MIGRATION_DIR, "sqlc.yaml")
+	err = os.WriteFile(sqlcConfigPath, []byte(sqlcConfig), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write sqlc.yaml: %w", err)
+	}
+
+	// Create example query file if queries directory is empty
+	exampleQueryPath := filepath.Join(queryDir, "example.sql")
+	if _, err := os.Stat(exampleQueryPath); os.IsNotExist(err) {
+		exampleQuery := `-- Example query file
+-- name: GetUser :one
+SELECT * FROM users WHERE user_id = $1 AND deleted_at IS NULL;
+
+-- name: ListUsers :many
+SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1;
+
+-- name: CreateUser :one
+INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *;
+
+-- name: UpdateUser :one
+UPDATE users SET name = $1, email = $2, updated_at = CURRENT_TIMESTAMP 
+WHERE user_id = $3 AND deleted_at IS NULL RETURNING *;
+
+-- name: DeleteUser :exec
+UPDATE users SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+WHERE user_id = $1 AND deleted_at IS NULL;
+`
+		err = os.WriteFile(exampleQueryPath, []byte(exampleQuery), 0644)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Could not create example query file: %v\n", err)
+		} else {
+			fmt.Printf("📝 Created example query file: %s\n", exampleQueryPath)
+		}
+	}
+
+	return nil
+}
+
+// Check if a command exists in PATH
+// @param cmd string
+// @return bool
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }

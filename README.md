@@ -34,6 +34,14 @@ A powerful and user-friendly database migration tool built in Go, designed to si
 - **Query Preview**: Shows actual SQL and parameters before execution
 - **Formatted Results**: Display query results in readable table format
 
+### 🏗️ SQLC Code Generation
+- **Auto-Initialize**: Creates `sqlc.yaml` and example queries automatically
+- **Type-Safe Code**: Generate Go structs and functions from SQL queries
+- **Smart Configuration**: Optimized defaults for PostgreSQL + pgx/v5
+- **Example Queries**: Includes common CRUD patterns with soft delete
+- **Error Handling**: Helpful installation and troubleshooting guidance
+- **Workflow Integration**: Seamless integration with migration workflow
+
 ### 🛡️ Advanced Features
 - **Type Safety**: Full Go type checking and error handling
 - **Database Validation**: Check table and column existence before operations
@@ -465,6 +473,279 @@ John Smith     | john.smith@... | 2025-01-15 ...
 - 🔮 **Bulk Operations**: Insert/update multiple records at once
 - 🔮 **JSON Operations**: Advanced JSONB column manipulation
 - 🔮 **Export/Import**: CSV/JSON data import/export functionality
+
+## 🏗️ SQLC Code Generation
+
+Migro includes integrated support for [SQLC](https://sqlc.dev/) to generate type-safe Go code from your SQL queries.
+
+### Quick Start
+
+```bash
+# 1. Initialize SQLC configuration
+./migro sqlc-init
+
+# 2. Create your migrations and run them
+./migro create-table --table=users --columns="name:varchar:not_null,email:varchar:unique"
+./migro migrate
+
+# 3. Generate Go code from your database schema
+./migro sqlc
+```
+
+### Initialize SQLC
+
+The `sqlc-init` command creates a complete SQLC setup:
+
+```bash
+./migro sqlc-init
+```
+
+**What it creates:**
+- ✅ `sqlc.yaml` - SQLC configuration file
+- ✅ `queries/` directory - For your SQL query files  
+- ✅ `queries/example.sql` - Example CRUD queries
+- ✅ Ready-to-use configuration for PostgreSQL + pgx/v5
+
+**Generated `sqlc.yaml`:**
+```yaml
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "queries"
+    schema: "."
+    gen:
+      go:
+        package: "db"
+        out: "../internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+```
+
+### Writing Queries
+
+Create `.sql` files in your `queries/` directory with SQLC annotations:
+
+**Example: `queries/users.sql`**
+```sql
+-- name: GetUser :one
+SELECT user_id, name, email, created_at, updated_at 
+FROM users 
+WHERE user_id = $1 AND deleted_at IS NULL;
+
+-- name: ListUsers :many
+SELECT user_id, name, email, created_at 
+FROM users 
+WHERE deleted_at IS NULL 
+ORDER BY created_at DESC 
+LIMIT $1;
+
+-- name: CreateUser :one
+INSERT INTO users (name, email) 
+VALUES ($1, $2) 
+RETURNING user_id, name, email, created_at, updated_at;
+
+-- name: UpdateUser :one
+UPDATE users 
+SET name = $1, email = $2, updated_at = CURRENT_TIMESTAMP
+WHERE user_id = $3 AND deleted_at IS NULL
+RETURNING user_id, name, email, updated_at;
+
+-- name: SoftDeleteUser :exec
+UPDATE users 
+SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+WHERE user_id = $1 AND deleted_at IS NULL;
+
+-- name: CountActiveUsers :one
+SELECT COUNT(*) FROM users WHERE deleted_at IS NULL;
+
+-- name: SearchUsers :many
+SELECT user_id, name, email, created_at
+FROM users 
+WHERE (name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%')
+  AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
+```
+
+### Generate Code
+
+```bash
+# Generate Go code from your queries
+./migro sqlc
+```
+
+**Auto-features:**
+- ✅ **Auto-creates** `sqlc.yaml` if missing
+- ✅ **Validates** sqlc command is installed  
+- ✅ **Helpful errors** with installation instructions
+- ✅ **Smart paths** relative to migration directory
+
+**Generated Go Code Structure:**
+```
+internal/db/
+├── db.go          # Database interface
+├── models.go      # Go structs for your tables
+├── users.sql.go   # Generated query functions
+└── queries.sql.go # All query implementations
+```
+
+### Using Generated Code
+
+**Example usage in your Go application:**
+```go
+package main
+
+import (
+    "context"
+    "database/sql"
+    
+    "your-project/internal/db"
+    _ "github.com/lib/pq"
+)
+
+func main() {
+    database, err := sql.Open("postgres", "your-connection-string")
+    if err != nil {
+        panic(err)
+    }
+    defer database.Close()
+
+    queries := db.New(database)
+    ctx := context.Background()
+
+    // Create a user
+    user, err := queries.CreateUser(ctx, db.CreateUserParams{
+        Name:  "John Doe",
+        Email: "john@example.com",
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // Get the user
+    fetchedUser, err := queries.GetUser(ctx, user.UserID)
+    if err != nil {
+        panic(err)
+    }
+
+    // List users with pagination
+    users, err := queries.ListUsers(ctx, 10)
+    if err != nil {
+        panic(err)
+    }
+
+    // Update user
+    updatedUser, err := queries.UpdateUser(ctx, db.UpdateUserParams{
+        UserID: user.UserID,
+        Name:   "Jane Doe",
+        Email:  "jane@example.com",
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // Soft delete
+    err = queries.SoftDeleteUser(ctx, user.UserID)
+    if err != nil {
+        panic(err)
+    }
+}
+```
+
+### SQLC Features
+
+#### Type Safety
+- ✅ **Compile-time safety**: Catch SQL errors at build time
+- ✅ **Go structs**: Auto-generated from your table schemas
+- ✅ **Null handling**: Proper handling of nullable database fields
+- ✅ **Custom types**: Support for UUIDs, timestamps, JSON, etc.
+
+#### Query Types
+- ✅ **`:one`** - Returns single row (or error if not found)
+- ✅ **`:many`** - Returns slice of rows
+- ✅ **`:exec`** - Execute without returning data
+- ✅ **`:execrows`** - Execute and return number of affected rows
+
+#### Advanced Features
+- ✅ **JSON tags**: Auto-generated for API serialization
+- ✅ **Interfaces**: Generate interfaces for testing/mocking
+- ✅ **Prepared statements**: Optional prepared statement support
+- ✅ **Custom overrides**: Map database types to custom Go types
+
+### Prerequisites
+
+**Install SQLC:**
+```bash
+# Using Go
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+# Using Homebrew (macOS)
+brew install sqlc
+
+# Using apt (Ubuntu/Debian)
+sudo apt install sqlc
+```
+
+**Verify installation:**
+```bash
+sqlc version
+```
+
+### Workflow Integration
+
+**Complete development workflow:**
+```bash
+# 1. Setup
+./migro sqlc-init
+
+# 2. Schema changes
+./migro create-table --table=posts --columns="title:varchar:not_null,content:text"
+./migro migrate
+
+# 3. Write queries
+vim queries/posts.sql
+
+# 4. Generate code
+./migro sqlc
+
+# 5. Use in your Go application
+go run main.go
+```
+
+### Troubleshooting
+
+**Common issues and solutions:**
+
+❌ **`relation "users" does not exist`**
+```bash
+# Make sure your database is migrated
+./migro migrate
+./migro status
+```
+
+❌ **`sqlc: command not found`**
+```bash
+# Install SQLC first
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+```
+
+❌ **`queries directory not found`**
+```bash
+# Re-run initialization
+./migro sqlc-init
+```
+
+❌ **`syntax error in query`**
+- Check SQLC query annotations (`-- name: QueryName :one`)
+- Verify SQL syntax is valid PostgreSQL
+- Ensure parameter placeholders use `$1`, `$2`, etc.
 
 ## 📝 Column Type Specification
 

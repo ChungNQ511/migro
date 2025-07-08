@@ -370,6 +370,13 @@ func main() {
 				},
 			},
 			{
+				Name:  "sqlc-init",
+				Usage: "Initialize SQLC configuration (creates sqlc.yaml and example queries)",
+				Action: func(c *cli.Context) error {
+					return migroCMD.InitSQLC(getGlobalConfig())
+				},
+			},
+			{
 				Name:  "sqlc",
 				Usage: "Generate SQLC code from database",
 				Action: func(c *cli.Context) error {

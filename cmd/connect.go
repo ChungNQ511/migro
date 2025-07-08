@@ -22,6 +22,7 @@ type CONFIG struct {
 	TIMEOUT_SECONDS            int    `mapstructure:"TIMEOUT_SECONDS"`
 	MIGRATION_DIR              string `mapstructure:"MIGRATION_DIR"`
 	QUERY_DIR                  string `mapstructure:"QUERY_DIR"`
+	SQLC_DIR                   string `mapstructure:"SQLC_DIR"`
 }
 
 func DBConnection(config *CONFIG) *pgxpool.Pool {
