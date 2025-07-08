@@ -316,6 +316,15 @@ var columnTypeMap = map[string]string{
 // @param table: string
 // @param columns: string
 func AddColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string) error {
+	// check table exists in migration files
+	exists, err := checkTableExistsInMigrations(config.MIGRATION_DIR, table)
+	if err != nil {
+		return fmt.Errorf("❌ error checking table exists: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("❌ table '%s' does not exist in migration files", table)
+	}
+
 	// get column names
 	columnNames := strings.Split(columns, ",")
 
@@ -685,7 +694,7 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 	}
 
 	// Create migration file using goose and then modify it
-	err = createMigrationDeleteColumnsFile(config, db, migrationFilename, table, columns)
+	err = createMigrationDeleteColumnsFile(config, migrationFilename, table, columns)
 	if err != nil {
 		return fmt.Errorf("❌ create migration failed: %w", err)
 	}
@@ -693,7 +702,7 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 }
 
 // createMigrationDeleteColumnsFile creates a migration file with ALTER TABLE DROP COLUMN SQL
-func createMigrationDeleteColumnsFile(config *CONFIG, db *pgxpool.Pool, migrationName, tableName, columns string) error {
+func createMigrationDeleteColumnsFile(config *CONFIG, migrationName, tableName, columns string) error {
 	ctx := context.Background()
 	migrationsDir := config.MIGRATION_DIR
 
