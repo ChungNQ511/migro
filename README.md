@@ -25,6 +25,15 @@ A powerful and user-friendly database migration tool built in Go, designed to si
 - **Read Table Schema**: Inspect table column information
 - **Reset Sequences**: Automatically reset table sequences to current max values
 
+### 💾 CRUD Operations
+- **Insert Data**: Add records to tables with automatic timestamp handling
+- **Update Data**: Modify existing records with automatic `updated_at` timestamps
+- **Select One**: Query single records with column selection and filtering
+- **Select Many**: Query multiple records with limit, ordering, and pagination
+- **Soft Delete**: Safe record deletion using `deleted_at` timestamp (preserves data)
+- **Query Preview**: Shows actual SQL and parameters before execution
+- **Formatted Results**: Display query results in readable table format
+
 ### 🛡️ Advanced Features
 - **Type Safety**: Full Go type checking and error handling
 - **Database Validation**: Check table and column existence before operations
@@ -285,6 +294,177 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_field VARCHAR(50) DEFAULT 'test'
 # Reset table sequence
 ./migro reset --table=users
 ```
+
+## 💾 CRUD Operations
+
+Migro includes built-in CRUD (Create, Read, Update, Delete) operations for basic data management:
+
+### Insert Data
+```bash
+# Insert a single record
+./migro insert \
+  --table=users \
+  --data="name=John Doe,email=john@example.com,age=25"
+
+# Insert with special characters (use quotes)
+./migro insert \
+  --table=users \
+  --data="name='John O''Brien',email=john@example.com,status=active"
+```
+
+**Example Output:**
+```
+🔄 Executing: INSERT INTO users (name, email, age) VALUES ($1, $2, $3) RETURNING *
+📝 Values: [John Doe john@example.com 25]
+✅ Insert successful!
+
+user_id         | name           | email          | age            | created_at     
+----------------|----------------|----------------|----------------|----------------
+1               | John Doe       | john@example...| 25             | 2025-01-15 ...
+```
+
+### Update Data
+```bash
+# Update record by ID
+./migro update \
+  --table=users \
+  --data="name=Jane Doe,age=26" \
+  --where="user_id=1"
+
+# Update by email
+./migro update \
+  --table=users \
+  --data="status=inactive" \
+  --where="email=john@example.com"
+```
+
+**Example Output:**
+```
+🔄 Executing: UPDATE users SET name = $1, age = $2, updated_at = $3 WHERE user_id = $4 RETURNING *
+📝 Values: [Jane Doe 26 2025-01-15 14:30:45 +0000 UTC 1]
+✅ Update successful!
+```
+
+### Select One Record
+```bash
+# Select all columns from one record
+./migro select-one \
+  --table=users \
+  --where="user_id=1"
+
+# Select specific columns
+./migro select-one \
+  --table=users \
+  --columns="name,email" \
+  --where="email=jane@example.com"
+```
+
+### Select Multiple Records
+```bash
+# Select all records (with automatic limit)
+./migro select-many \
+  --table=users
+
+# Select with WHERE condition
+./migro select-many \
+  --table=users \
+  --where="age=25" \
+  --limit=50
+
+# Select specific columns with custom limit
+./migro select-many \
+  --table=users \
+  --columns="name,email,created_at" \
+  --where="status=active" \
+  --limit=20
+```
+
+**Example Output:**
+```
+🔄 Executing: SELECT name, email, created_at FROM users WHERE status = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 20
+📝 Values: [active]
+✅ Records found:
+
+name           | email          | created_at     
+---------------|----------------|----------------
+Jane Doe       | jane@example...| 2025-01-15 ...
+John Smith     | john.smith@... | 2025-01-15 ...
+
+📊 Total records: 2 (showing max 20)
+```
+
+### Soft Delete
+```bash
+# Soft delete by ID (sets deleted_at timestamp)
+./migro delete \
+  --table=users \
+  --where="user_id=1"
+
+# Soft delete by condition
+./migro delete \
+  --table=users \
+  --where="email=old@example.com"
+```
+
+**Example Output:**
+```
+🔄 Executing soft delete: UPDATE users SET deleted_at = $1, updated_at = $2 WHERE user_id = $3 AND deleted_at IS NULL RETURNING *
+📝 Values: [2025-01-15 14:35:10 +0000 UTC 2025-01-15 14:35:10 +0000 UTC 1]
+✅ Soft delete successful!
+```
+
+### CRUD Data Format
+
+**Data Format**: Use `column=value` pairs separated by commas:
+```bash
+# Simple values
+--data="name=John,age=25,active=true"
+
+# Values with quotes (for strings with spaces/special chars)
+--data="name='John Doe',description='A user with description'"
+
+# Boolean and numeric values
+--data="age=25,salary=50000.50,is_admin=false"
+```
+
+**WHERE Format**: Simple equality conditions:
+```bash
+# Numeric comparison
+--where="user_id=1"
+
+# String comparison (quotes optional for simple strings)
+--where="email=john@example.com"
+--where="name='John Doe'"
+
+# Boolean comparison
+--where="active=true"
+```
+
+### CRUD Features
+
+#### Safety Features
+- ✅ **Table Validation**: Checks table exists in migration files before operations
+- ✅ **Soft Delete**: Delete operations set `deleted_at` timestamp (preserves data)
+- ✅ **Auto Timestamps**: Updates `updated_at` automatically on modifications
+- ✅ **Query Preview**: Shows actual SQL query and parameters before execution
+- ✅ **Result Display**: Formats query results in readable table format
+
+#### Automatic Columns
+- 🕒 **created_at**: Auto-populated on INSERT (if column exists)
+- 🕒 **updated_at**: Auto-updated on UPDATE operations
+- 🗑️ **deleted_at**: Set by soft delete operations
+- 🔑 **Primary Key**: Auto-incremented (typically `{table}_id`)
+
+#### Current Limitations
+- 📝 **WHERE Clauses**: Currently supports simple `column=value` conditions
+- 📝 **Data Types**: Basic type inference (more complex types planned)
+- 📝 **Joins**: Single table operations only
+
+#### Future Enhancements
+- 🔮 **Complex WHERE**: Support for `AND`, `OR`, `>`, `<`, `LIKE` conditions
+- 🔮 **Bulk Operations**: Insert/update multiple records at once
+- 🔮 **JSON Operations**: Advanced JSONB column manipulation
+- 🔮 **Export/Import**: CSV/JSON data import/export functionality
 
 ## 📝 Column Type Specification
 

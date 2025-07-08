@@ -232,6 +232,144 @@ func main() {
 				},
 			},
 			{
+				Name:  "insert",
+				Usage: "Insert data into a table",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "table",
+						Aliases:  []string{"t"},
+						Usage:    "Table name to insert data into",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "data",
+						Aliases:  []string{"d"},
+						Usage:    "Data to insert in format: column1=value1,column2=value2",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					pool := migroCMD.DBConnection(getGlobalConfig())
+					defer pool.Close()
+					return migroCMD.InsertData(getGlobalConfig(), pool, c.String("table"), c.String("data"))
+				},
+			},
+			{
+				Name:  "update",
+				Usage: "Update data in a table",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "table",
+						Aliases:  []string{"t"},
+						Usage:    "Table name to update data in",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "data",
+						Aliases:  []string{"d"},
+						Usage:    "Data to update in format: column1=value1,column2=value2",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "where",
+						Aliases:  []string{"w"},
+						Usage:    "WHERE clause in format: column=value",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					pool := migroCMD.DBConnection(getGlobalConfig())
+					defer pool.Close()
+					return migroCMD.UpdateData(getGlobalConfig(), pool, c.String("table"), c.String("data"), c.String("where"))
+				},
+			},
+			{
+				Name:  "select-one",
+				Usage: "Select one record from a table",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "table",
+						Aliases:  []string{"t"},
+						Usage:    "Table name to select from",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:    "columns",
+						Aliases: []string{"c"},
+						Usage:   "Columns to select (default: *)",
+						Value:   "*",
+					},
+					&cli.StringFlag{
+						Name:     "where",
+						Aliases:  []string{"w"},
+						Usage:    "WHERE clause in format: column=value",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					pool := migroCMD.DBConnection(getGlobalConfig())
+					defer pool.Close()
+					return migroCMD.SelectOne(getGlobalConfig(), pool, c.String("table"), c.String("columns"), c.String("where"))
+				},
+			},
+			{
+				Name:  "select-many",
+				Usage: "Select multiple records from a table",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "table",
+						Aliases:  []string{"t"},
+						Usage:    "Table name to select from",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:    "columns",
+						Aliases: []string{"c"},
+						Usage:   "Columns to select (default: *)",
+						Value:   "*",
+					},
+					&cli.StringFlag{
+						Name:    "where",
+						Aliases: []string{"w"},
+						Usage:   "WHERE clause in format: column=value (optional)",
+					},
+					&cli.IntFlag{
+						Name:    "limit",
+						Aliases: []string{"l"},
+						Usage:   "Maximum number of records to return (default: 100)",
+						Value:   100,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					pool := migroCMD.DBConnection(getGlobalConfig())
+					defer pool.Close()
+					return migroCMD.SelectMany(getGlobalConfig(), pool, c.String("table"), c.String("columns"), c.String("where"), c.Int("limit"))
+				},
+			},
+			{
+				Name:  "delete",
+				Usage: "Soft delete record from a table (sets deleted_at)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "table",
+						Aliases:  []string{"t"},
+						Usage:    "Table name to delete from",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "where",
+						Aliases:  []string{"w"},
+						Usage:    "WHERE clause in format: column=value",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					pool := migroCMD.DBConnection(getGlobalConfig())
+					defer pool.Close()
+					return migroCMD.SoftDelete(getGlobalConfig(), pool, c.String("table"), c.String("where"))
+				},
+			},
+			{
 				Name:  "sqlc",
 				Usage: "Generate SQLC code from database",
 				Action: func(c *cli.Context) error {
