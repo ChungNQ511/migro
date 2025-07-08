@@ -316,15 +316,48 @@ var columnTypeMap = map[string]string{
 // @param table: string
 // @param columns: string
 func AddColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string) error {
-	// get first column name
+	// get column names
 	columnNames := strings.Split(columns, ",")
-	columnName := strings.Split(columnNames[0], ":")[0]
 
 	var migrationFilename string
 	if len(columnNames) == 1 {
+		// Single column: add_column_{columnName}_to_{table}
+		columnName := strings.TrimSpace(strings.Split(columnNames[0], ":")[0])
 		migrationFilename = fmt.Sprintf("add_column_%s_to_%s", columnName, table)
 	} else {
-		migrationFilename = fmt.Sprintf("add_columns_to_%s", table)
+		// Multiple columns: add_columns_{col1}_{col2}_to_{table}
+		// Extract column names and limit filename length
+		var columnNamesForFile []string
+		for _, col := range columnNames {
+			colName := strings.TrimSpace(strings.Split(col, ":")[0])
+			if colName != "" {
+				columnNamesForFile = append(columnNamesForFile, colName)
+			}
+		}
+
+		// Join column names with underscore
+		columnsStr := strings.Join(columnNamesForFile, "_")
+
+		// If filename would be too long, truncate and add hash
+		maxLength := 80 // reasonable filename length
+		baseFilename := fmt.Sprintf("add_columns_%s_to_%s", columnsStr, table)
+
+		if len(baseFilename) > maxLength {
+			// Create a shorter version with first few columns + hash
+			shortColumnsStr := ""
+			if len(columnNamesForFile) > 0 {
+				shortColumnsStr = columnNamesForFile[0]
+				if len(columnNamesForFile) > 1 {
+					shortColumnsStr += "_and_more"
+				}
+			}
+
+			// Simple hash of all column names
+			hash := fmt.Sprintf("%x", len(columns)+len(strings.Join(columnNamesForFile, "")))[:6]
+			migrationFilename = fmt.Sprintf("add_columns_%s_%s_to_%s", shortColumnsStr, hash, table)
+		} else {
+			migrationFilename = baseFilename
+		}
 	}
 
 	// check if any file with pattern 14-digit-number_migration.sql exists
@@ -585,10 +618,10 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 
 	// get column names
 	columnNames := strings.Split(columns, ",")
-	columnName := strings.TrimSpace(strings.Split(columnNames[0], ":")[0])
 
 	var migrationFilename string
 	if len(columnNames) == 1 {
+		columnName := strings.TrimSpace(strings.Split(columnNames[0], ":")[0])
 		// check column exists
 		exists, err := checkColumnExists(db, table, columnName)
 		if err != nil {
@@ -599,19 +632,47 @@ func DeleteColumn(config *CONFIG, db *pgxpool.Pool, table string, columns string
 		}
 		migrationFilename = fmt.Sprintf("delete_column_%s_from_%s", columnName, table)
 	} else {
-		// check if all columns exist
-		for _, columnName := range columnNames {
-			columnName = strings.TrimSpace(strings.Split(columnName, ":")[0])
-
-			exists, err := checkColumnExists(db, table, columnName)
-			if err != nil {
-				return fmt.Errorf("❌ error checking column exists: %w", err)
-			}
-			if !exists {
-				return fmt.Errorf("❌ column '%s' does not exist in table '%s'", columnName, table)
+		// Multiple columns: delete_columns_{col1}_{col2}_from_{table}
+		// Extract column names and limit filename length
+		var columnNamesForFile []string
+		for _, col := range columnNames {
+			colName := strings.TrimSpace(strings.Split(col, ":")[0])
+			if colName != "" {
+				// check column exists
+				exists, err := checkColumnExists(db, table, colName)
+				if err != nil {
+					return fmt.Errorf("❌ error checking column exists: %w", err)
+				}
+				if !exists {
+					return fmt.Errorf("❌ column '%s' does not exist in table '%s'", colName, table)
+				}
+				columnNamesForFile = append(columnNamesForFile, colName)
 			}
 		}
-		migrationFilename = fmt.Sprintf("delete_columns_from_%s", table)
+
+		// Join column names with underscore
+		columnsStr := strings.Join(columnNamesForFile, "_")
+
+		// If filename would be too long, truncate and add hash
+		maxLength := 80 // reasonable filename length
+		baseFilename := fmt.Sprintf("delete_columns_%s_from_%s", columnsStr, table)
+
+		if len(baseFilename) > maxLength {
+			// Create a shorter version with first few columns + hash
+			shortColumnsStr := ""
+			if len(columnNamesForFile) > 0 {
+				shortColumnsStr = columnNamesForFile[0]
+				if len(columnNamesForFile) > 1 {
+					shortColumnsStr += "_and_more"
+				}
+			}
+
+			// Simple hash of all column names
+			hash := fmt.Sprintf("%x", len(columns)+len(strings.Join(columnNamesForFile, "")))[:6]
+			migrationFilename = fmt.Sprintf("delete_columns_%s_%s_from_%s", shortColumnsStr, hash, table)
+		} else {
+			migrationFilename = baseFilename
+		}
 	}
 
 	// check if migration file already exists
