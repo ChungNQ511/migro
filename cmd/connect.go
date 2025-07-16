@@ -66,6 +66,21 @@ func LoadConfig(configPath string) (*CONFIG, error) {
 }
 
 func buildConnectionString(config *CONFIG) string {
+	// Check for placeholder values that indicate incomplete configuration
+	placeholders := []string{"your_username", "your_password", "your_database"}
+	for _, placeholder := range placeholders {
+		if config.DATABASE_USERNAME == placeholder || 
+		   config.DATABASE_PASSWORD == placeholder || 
+		   config.DATABASE_NAME == placeholder {
+			fmt.Printf("❌ Configuration Error: Found placeholder value '%s' in migro.yaml\n", placeholder)
+			fmt.Println("💡 Please update your migro.yaml file with actual database credentials:")
+			fmt.Printf("   DATABASE_USERNAME: <your_actual_username>\n")
+			fmt.Printf("   DATABASE_PASSWORD: <your_actual_password>\n") 
+			fmt.Printf("   DATABASE_NAME: <your_actual_database_name>\n")
+			return ""
+		}
+	}
+	
 	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable",
 		config.DATABASE_DRIVER,
 		config.DATABASE_USERNAME,

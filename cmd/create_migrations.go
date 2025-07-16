@@ -20,6 +20,7 @@ func CreateEmptyMigration(migrationDir, name string) error {
 	ctx := context.Background()
 
 	// Use goose create command to generate migration file
+	// Note: For create command, we don't need DRIVER and DBSTRING parameters
 	cmd := exec.CommandContext(ctx, "goose",
 		"-dir", migrationDir,
 		"create", name, "sql")

@@ -105,16 +105,10 @@ SELECT 1; -- Placeholder
 }
 
 func showMigrationStatus(config *CONFIG) error {
-	ctx := context.Background()
-
 	fmt.Println("\n📊 Current migration status:")
 
-	cmd := exec.CommandContext(ctx, "goose",
-		"-dir", config.MIGRATION_DIR,
-		config.DATABASE_CONNECTION_STRING,
-		"status")
-
-	output, err := cmd.CombinedOutput()
+	// Use the same executeGoose function for consistency
+	output, err := executeGoose(config, MigrationScriptStatus)
 	if err != nil {
 		return fmt.Errorf("failed to get migration status: %w\nOutput: %s", err, string(output))
 	}
@@ -248,13 +242,67 @@ const (
 func executeGoose(config *CONFIG, script MigrationScript) ([]byte, error) {
 	ctx := context.Background()
 
+	// Validate required configuration
+	if config.DATABASE_DRIVER == "" {
+		return nil, fmt.Errorf("DATABASE_DRIVER is not configured. Please check your migro.yaml file")
+	}
+	if config.DATABASE_CONNECTION_STRING == "" {
+		return nil, fmt.Errorf("DATABASE_CONNECTION_STRING is not configured. Please check your migro.yaml file")
+	}
+	if config.MIGRATION_DIR == "" {
+		return nil, fmt.Errorf("MIGRATION_DIR is not configured. Please check your migro.yaml file")
+	}
+
+	// Build goose command with correct parameter order
+	// Format: goose [OPTIONS] DRIVER DBSTRING COMMAND
 	cmd := exec.CommandContext(ctx, "goose",
 		"-dir", config.MIGRATION_DIR,
 		config.DATABASE_DRIVER,
 		config.DATABASE_CONNECTION_STRING,
 		string(script))
 
-	return cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
+
+	// If first attempt fails, try alternative format with environment variables
+	if err != nil && strings.Contains(string(output), "Usage: goose") {
+		fmt.Printf("⚠️  First goose format failed, trying with environment variables...\n")
+
+		// Set environment variables for goose
+		cmd = exec.CommandContext(ctx, "goose", "-dir", config.MIGRATION_DIR, string(script))
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("GOOSE_DRIVER=%s", config.DATABASE_DRIVER),
+			fmt.Sprintf("GOOSE_DBSTRING=%s", config.DATABASE_CONNECTION_STRING),
+		)
+
+		output, err = cmd.CombinedOutput()
+		
+		if err == nil {
+			fmt.Printf("✅ Environment variable approach succeeded\n")
+		}
+	}
+
+	// Debug output for troubleshooting
+	if err != nil {
+		fmt.Printf("🔧 Debug: goose command failed\n")
+		fmt.Printf("   Command: goose -dir %s %s %s %s\n",
+			config.MIGRATION_DIR,
+			config.DATABASE_DRIVER,
+			config.DATABASE_CONNECTION_STRING,
+			string(script))
+		fmt.Printf("   Working directory: %s\n", config.MIGRATION_DIR)
+		fmt.Printf("   Database driver: %s\n", config.DATABASE_DRIVER)
+		fmt.Printf("   Connection string: %s\n", maskPassword(config.DATABASE_CONNECTION_STRING))
+		fmt.Printf("   Output: %s\n", string(output))
+	}
+
+	return output, err
+}
+
+// maskPassword masks the password in connection string for logging
+func maskPassword(connString string) string {
+	// Simple regex to mask password in postgres connection string
+	re := regexp.MustCompile(`(password=)[^&\s]+`)
+	return re.ReplaceAllString(connString, "${1}***")
 }
 
 // Calculate how many migrations need to be rolled back to reach the missing version
