@@ -221,7 +221,7 @@ func parseColumnDefinition(column string) (string, error) {
 					return "", err
 				}
 				columnExtra.WriteString(" " + defaultClause)
-			} else if option == "not_null" {
+			} else if option == "not_null" || option == "notnull" {
 				columnExtra.WriteString(" NOT NULL")
 			} else if option == "unique" {
 				columnExtra.WriteString(" UNIQUE")
